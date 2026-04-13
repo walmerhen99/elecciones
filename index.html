@@ -3,162 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escrutinio en Tiempo Real</title>
+    <title>Monitor Electoral Manual</title>
     <style>
         :root {
             --primary: #2c3e50;
             --success: #27ae60;
             --danger: #e74c3c;
-            --light: #ecf0f1;
+            --accent: #3498db;
         }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 1100px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: var(--primary); text-align: center; border-bottom: 2px solid var(--light); padding-bottom: 10px; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         
-        .controls { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; flex-wrap: wrap; }
-        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: 0.3s; }
-        .btn-update { background: var(--primary); color: white; }
-        .btn-update:hover { background: #34495e; }
+        h1 { text-align: center; color: var(--primary); margin-bottom: 30px; }
+        
+        .input-section { margin-bottom: 30px; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
+        textarea { width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: vertical; font-family: monospace; box-sizing: border-box; }
+        
+        .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        button { padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+        .btn-process { background: var(--accent); color: white; flex-grow: 1; }
+        .btn-process:hover { background: #2980b9; }
         .btn-clear { background: #95a5a6; color: white; }
-        .btn-clear:hover { background: #7f8c8d; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: var(--light); color: var(--primary); text-align: left; padding: 15px; border-bottom: 2px solid #ddd; }
-        td { padding: 12px 15px; border-bottom: 1px solid #eee; }
-        tr:hover { background: #f9f9f9; }
-
-        .pct { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
-        .diff-up { color: var(--success); font-weight: bold; background: #eafaf1; padding: 4px 8px; border-radius: 4px; }
-        .diff-down { color: var(--danger); font-weight: bold; background: #fdedec; padding: 4px 8px; border-radius: 4px; }
-        .diff-equal { color: #7f8c8d; }
         
-        .btn-small { padding: 5px 10px; font-size: 0.8em; background: #f2f2f2; color: #333; border: 1px solid #ccc; }
-        .btn-small:hover { background: #e0e0e0; }
-
-        @media (max-width: 600px) {
-            th:nth-child(2), td:nth-child(2) { display: none; } /* Ocultar votos en móvil */
-        }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #f2f2f2; text-align: left; padding: 15px; border-bottom: 2px solid #ddd; }
+        td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+        
+        .diff-up { color: var(--success); font-weight: bold; }
+        .diff-down { color: var(--danger); font-weight: bold; }
+        .diff-new { color: var(--accent); font-style: italic; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; }
+        .up-bg { background: #eafaf1; }
+        .down-bg { background: #fdedec; }
+        
+        small { color: #666; display: block; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>📊 Monitor de Resultados ONPE</h1>
-    
-    <div class="controls">
-        <button class="btn-update" onclick="procesarActualizacion()">🔄 Refrescar y Comparar</button>
-        <button class="btn-clear" onclick="limpiarTodoElHistorial()">🗑️ Borrar Historial Global</button>
+    <h1>🗳️ Procesador de Datos Electorales</h1>
+
+    <div class="input-section">
+        <label><strong>Pega el JSON de respuesta aquí:</strong></label>
+        <textarea id="json-input" placeholder='{"success":true, "data": [...]}'></textarea>
+        <div class="controls">
+            <button class="btn-process" onclick="procesarManual()">📊 Procesar y Comparar Porcentajes</button>
+            <button class="btn-clear" onclick="limpiarTodo()">🗑️ Resetear Historial</button>
+        </div>
     </div>
 
-    <table>
+    <table id="main-table" style="display: none;">
         <thead>
             <tr>
                 <th>Candidato / Partido</th>
-                <th>Votos Totales</th>
+                <th>Votos</th>
                 <th>% Actual</th>
                 <th>Variación</th>
                 <th>Acción</th>
             </tr>
         </thead>
-        <tbody id="tabla-resultados">
-            </tbody>
+        <tbody id="tabla-body"></tbody>
     </table>
 </div>
 
 <script>
-    // Configuración
-    const API_URL = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general/participantes?idEleccion=10&tipoFiltro=eleccion";
-    const STORAGE_KEY = 'historial_electoral_onpe';
+    const STORAGE_KEY = 'comparador_electoral_data';
 
-    // Función principal
-    async function procesarActualizacion() {
+    function procesarManual() {
+        const rawInput = document.getElementById('json-input').value.trim();
+        if (!rawInput) return alert("Por favor, pega el contenido JSON.");
+
         try {
-            const response = await fetch(API_URL);
-            if (!response.ok) throw new Error("No se pudo conectar con ONPE");
+            const parsed = JSON.parse(rawInput);
+            const data = parsed.data || [];
             
-            const json = await response.json();
-            renderizar(json.data);
-        } catch (error) {
-            console.warn("Usando datos de respaldo por error de CORS o red.");
-            // Datos de respaldo (los que me pasaste) en caso de que la API falle
-            const datosRespaldo = [
-                {"nombreAgrupacionPolitica":"RENOVACIÓN POPULAR","nombreCandidato":"RAFAEL LÓPEZ ALIAGA","dniCandidato":"07845838","totalVotosValidos":1423749,"porcentajeVotosValidos":14.531},
-                {"nombreAgrupacionPolitica":"FUERZA POPULAR","nombreCandidato":"KEIKO FUJIMORI","dniCandidato":"10001088","totalVotosValidos":1661796,"porcentajeVotosValidos":16.96}
-                // ... podrías pegar aquí todo el JSON que me diste
-            ];
-            renderizar(datosRespaldo);
+            if (data.length === 0) throw new Error("No se encontraron candidatos en la propiedad 'data'.");
+
+            renderizarResultados(data);
+            document.getElementById('main-table').style.display = 'table';
+            document.getElementById('json-input').value = ''; // Limpiar para la próxima
+        } catch (e) {
+            alert("Error al leer el JSON: " + e.message);
         }
     }
 
-    function renderizar(dataActual) {
-        const tabla = document.getElementById('tabla-resultados');
+    function renderizarResultados(dataActual) {
+        const tbody = document.getElementById('tabla-body');
         const historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
         
-        tabla.innerHTML = '';
+        tbody.innerHTML = '';
 
-        // Ordenar por votos de mayor a menor
+        // Ordenar por más votados
         dataActual.sort((a, b) => b.totalVotosValidos - a.totalVotosValidos);
 
         dataActual.forEach(c => {
-            const dni = c.dniCandidato;
+            const id = c.dniCandidato;
             const pctActual = parseFloat(c.porcentajeVotosValidos);
-            const pctAnterior = historial[dni] !== undefined ? historial[dni] : pctActual;
+            const tieneHistorial = historial[id] !== undefined;
+            const pctAnterior = tieneHistorial ? historial[id] : pctActual;
             
-            const diferencia = (pctActual - pctAnterior).toFixed(3);
+            const diff = (pctActual - pctAnterior).toFixed(3);
             
-            let claseDiff = 'diff-equal';
-            let textoDiff = `0.000%`;
-
-            if (diferencia > 0) {
-                claseDiff = 'diff-up';
-                textoDiff = `▲ +${diferencia}%`;
-            } else if (diferencia < 0) {
-                claseDiff = 'diff-down';
-                textoDiff = `▼ ${diferencia}%`;
+            let htmlDiff = '';
+            if (!tieneHistorial) {
+                htmlDiff = '<span class="diff-new">Nuevo registro</span>';
+            } else if (diff > 0) {
+                htmlDiff = `<span class="diff-up badge up-bg">▲ +${diff}%</span>`;
+            } else if (diff < 0) {
+                htmlDiff = `<span class="diff-down badge down-bg">▼ ${diff}%</span>`;
+            } else {
+                htmlDiff = `<span style="color:#999">No cambió</span>`;
             }
 
-            const row = `
+            const fila = `
                 <tr>
                     <td>
-                        <strong>${c.nombreCandidato}</strong><br>
-                        <small style="color: #666">${c.nombreAgrupacionPolitica}</small>
+                        <strong>${c.nombreCandidato}</strong>
+                        <small>${c.nombreAgrupacionPolitica}</small>
                     </td>
                     <td>${c.totalVotosValidos.toLocaleString()}</td>
-                    <td class="pct">${pctActual}%</td>
-                    <td><span class="${claseDiff}">${textoDiff}</span></td>
+                    <td><strong>${pctActual}%</strong></td>
+                    <td>${htmlDiff}</td>
                     <td>
-                        <button class="btn-small" onclick="limpiarCandidato('${dni}')">Reset</button>
+                        <button onclick="borrarUno('${id}')" style="font-size:10px">Borrar Ref.</button>
                     </td>
                 </tr>
             `;
-            tabla.innerHTML += row;
+            tbody.innerHTML += fila;
 
-            // Actualizamos el historial para la próxima refrescada
-            historial[dni] = pctActual;
+            // Actualizar historial con el nuevo valor
+            historial[id] = pctActual;
         });
 
-        // Guardar el estado actual como "anterior" para la siguiente carga
         localStorage.setItem(STORAGE_KEY, JSON.stringify(historial));
     }
 
-    function limpiarCandidato(dni) {
+    function borrarUno(dni) {
         let historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
         delete historial[dni];
         localStorage.setItem(STORAGE_KEY, JSON.stringify(historial));
-        alert("Historial individual borrado. Se recalculará en la próxima actualización.");
-        procesarActualizacion();
+        alert("Referencia borrada para este candidato. En el próximo proceso aparecerá como 'Nuevo'.");
     }
 
-    function limpiarTodoElHistorial() {
-        if(confirm("¿Deseas resetear todas las comparaciones?")) {
+    function limpiarTodo() {
+        if (confirm("¿Borrar toda la memoria de comparación?")) {
             localStorage.removeItem(STORAGE_KEY);
-            procesarActualizacion();
+            document.getElementById('tabla-body').innerHTML = '';
+            document.getElementById('main-table').style.display = 'none';
         }
     }
-
-    // Ejecutar al cargar la página
-    procesarActualizacion();
-
 </script>
 
 </body>
